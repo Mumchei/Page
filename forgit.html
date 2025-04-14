@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>שידור חי – ערוצי וידאו</title>
+  <!-- גופן מודרני -->
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+  <!-- ספריית hls.js לניגון HLS -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <!-- ספריית mpegts.js לניגון זרמים מסוג TS -->
+  <script src="https://cdn.jsdelivr.net/npm/mpegts.js@latest/dist/mpegts.js"></script>
+  <style>
+    /* Reset בסיסי */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Roboto', sans-serif;
+      background: linear-gradient(135deg, #1f1c2c, #928dab);
+      color: #f0f0f0;
+      line-height: 1.6;
+    }
+    /* כותרת עליונה עם לוגו */
+    .header-top {
+      background: linear-gradient(90deg, #FF512F, #DD2476);
+      padding: 15px 20px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    .header-top img {
+      max-height: 120px;
+      vertical-align: middle;
+    }
+    .header-top h1 {
+      display: inline-block;
+      margin-left: 10px;
+      font-size: 1.8em;
+      vertical-align: middle;
+      color: #fff;
+      text-shadow: 1px 1px 4px rgba(0,0,0,0.4);
+    }
+    /* קונטיינר ראשי – מוצג לאחר התחברות מוצלחת */
+    .container {
+      max-width: 1000px;
+      margin: 20px auto;
+      padding: 0 20px;
+      display: none;
+    }
+    /* תצוגת השעה העדכנית */
+    .current-time {
+      text-align: center;
+      font-size: 1em;
+      color: #fff;
+      margin: 10px 0;
+    }
+    /* אזור הווידאו */
+    .video-container {
+      position: relative;
+      width: 100%;
+      padding-top: 56.25%;
+      margin-bottom: 10px;
+      border: 2px solid rgba(255,255,255,0.2);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+    }
+    /* הצגת placeholder בתחילת טעינת הווידאו */
+    #videoPlaceholder {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    /* הווידאו מוסתר בתחילה */
+    #mainVideo {
+      display: none;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+    /* אזור פרטי הערוץ */
+    .video-info {
+      display: flex;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 10px 15px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .video-info img {
+      width: 80px;
+      height: 80px;
+      object-fit: cover;
+      border-radius: 8px;
+      margin-right: 15px;
+    }
+    .video-info-text h2 {
+      font-size: 1.4em;
+      margin-bottom: 5px;
+      color: #FFCE00;
+    }
+    .video-info-text p {
+      font-size: 1em;
+      color: #ccc;
+    }
+    /* אזור הרשימה */
+    .list-section {
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: 10px;
+      padding: 15px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .search-container {
+      margin-bottom: 15px;
+    }
+    .search-container input {
+      width: 100%;
+      padding: 10px;
+      font-size: 1em;
+      border: none;
+      border-radius: 5px;
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      transition: background 0.3s, border-color 0.3s;
+    }
+    .search-container input::placeholder {
+      color: rgba(255,255,255,0.7);
+    }
+    .search-container input:focus {
+      background: rgba(255,255,255,0.15);
+      border-color: #FFCE00;
+    }
+    .list-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 15px;
+    }
+    .list-item {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: transform 0.2s, background 0.2s;
+    }
+    .list-item:hover {
+      transform: scale(1.02);
+      background: rgba(255, 255, 255, 0.15);
+    }
+    .list-item img {
+      width: 100%;
+      height: 140px;
+      object-fit: cover;
+      display: block;
+    }
+    .item-details {
+      padding: 10px;
+      background: linear-gradient(90deg, rgba(0,0,0,0.7), rgba(0,0,0,0.5));
+    }
+    .item-details h3 {
+      font-size: 1.1em;
+      margin-bottom: 5px;
+      color: #FFCE00;
+    }
+    .item-details p {
+      font-size: 0.9em;
+      color: #ccc;
+    }
+    /* אזור אודות */
+    .about-section {
+      text-align: center;
+      padding: 15px;
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: 10px;
+      font-size: 0.9em;
+      color: #ccc;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    /* הודעת "לא נמצאו תוצאות" */
+    .no-results {
+      text-align: center;
+      padding: 15px;
+      font-size: 1em;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <header class="header-top">
+    <img src="https://raw.githubusercontent.com/Mumchei/Imagesport/1bd3554d66cc6e64f0cd1c4b2d7d6906948f23ca/35116e47-3e90-43aa-9972-08abc10f6b4d.jpg" alt="לוגו">
+    <h1></h1>
+  </header>
+  
+  <!-- תצוגת השעה העדכנית מתחת לכותרת -->
+  <div class="current-time" id="currentTime"></div>
+  
+  <!-- עמוד האימות -->
+  <div class="login-container" id="loginContainer" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); display:flex; justify-content:center; align-items:center; z-index:1000;">
+    <div class="login-form" style="background:#2c2c2c; padding:30px; border-radius:10px; box-shadow:0 8px 20px rgba(0,0,0,0.5); width:90%; max-width:400px; text-align:center;">
+      <img class="app-logo" src="https://raw.githubusercontent.com/Mumchei/Imagesport/refs/heads/main/1000006624%20(1).jpg" alt="לוגו האפליקציה" style="margin-bottom:10px;">
+      <h2 style="margin-bottom:10px; color:#FFCE00;">התחברות</h2>
+      <p class="about" style="font-size:0.9em; color:#ccc; margin-bottom:20px;">אודות האתר: האתר נבנה על ידי שכ"ט.</p>
+      <div class="error" id="loginError" style="display:none; color:#ff4d4d; margin-bottom:15px;">שם משתמש או סיסמה שגויים</div>
+      <input type="text" id="username" placeholder="שם משתמש" style="width:100%; padding:12px; margin-bottom:15px; border:none; border-radius:5px; font-size:1em;">
+      <input type="password" id="password" placeholder="סיסמה" style="width:100%; padding:12px; margin-bottom:15px; border:none; border-radius:5px; font-size:1em;">
+      <button onclick="login()" style="width:100%; padding:12px; border:none; border-radius:5px; background:#FF512F; color:#fff; font-size:1em; cursor:pointer; transition:background 0.3s;">התחבר</button>
+    </div>
+  </div>
+  
+  <!-- עמוד הצפייה – מוצג לאחר התחברות מוצלחת -->
+  <div class="container" id="mainContent" style="display:none;">
+    <!-- תצוגת השעה העדכנית -->
+    <div class="current-time" id="currentTime"></div>
+    <!-- אזור הווידאו עם placeholder -->
+    <div class="video-container">
+      <img id="videoPlaceholder" src="https://raw.githubusercontent.com/Mumchei/Imagesport/1bd3554d66cc6e64f0cd1c4b2d7d6906948f23ca/d4a6b673-d83d-4e18-8b13-4a64bd05b4fc.jpg" alt="לוגו" style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover;">
+      <video id="mainVideo" controls style="display:none;"></video>
+    </div>
+    <!-- אזור פרטי הערוץ -->
+    <div class="video-info" id="videoInfo">
+      <!-- בתחילה: "לא נבחר ערוץ" ולוגו -->
+      <img src="https://raw.githubusercontent.com/Mumchei/Imagesport/refs/heads/main/1000006624%20(1).jpg" alt="לוגו" id="infoImage">
+      <div class="video-info-text">
+        <h2 id="infoTitle">לא נבחר ערוץ</h2>
+        <p id="infoSubtitle"></p>
+      </div>
+    </div>
+    <!-- אזור הרשימה -->
+    <div class="list-section">
+      <div class="search-container">
+        <input type="text" id="searchBar" placeholder="חפש ערוץ...">
+      </div>
+      <div class="list-container" id="channelList">
+        <!-- פריטי הערוצים יוצגו כאן -->
+      </div>
+    </div>
+    <!-- אזור אודות -->
+    <div class="about-section">
+      האתר נבנה על ידי שכ"ט.
+    </div>
+  </div>
+  
+  <script>
+    // נתוני התחברות (לדוגמה בלבד)
+    const VALID_USERNAME = "user";
+    const VALID_PASSWORD = "pass";
+
+    function login() {
+      const username = document.getElementById("username").value;
+      const password = document.getElementById("password").value;
+      const errorDiv = document.getElementById("loginError");
+      if (username === VALID_USERNAME && password === VALID_PASSWORD) {
+        document.getElementById("loginContainer").style.display = "none";
+        document.getElementById("mainContent").style.display = "block";
+      } else {
+        errorDiv.style.display = "block";
+      }
+    }
+
+    // עדכון תצוגת השעה העכשווית
+    function updateCurrentTime() {
+      const now = new Date();
+      const options = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
+      document.getElementById("currentTime").textContent = now.toLocaleTimeString('he-IL', options);
+    }
+    updateCurrentTime();
+    setInterval(updateCurrentTime, 1000);
+
+    // מערך נתונים לדוגמה – 11 ערוצים
+    const channels = [
+  {
+    title: "Sport 1",
+    subtitle: "ספורט 1",
+    image: "https://raw.githubusercontent.com/Mumchei/Imagesport/5731cfcb0c8e501c84eb8067a8afc616e3e3d7e0/sport1.png",
+    videoUrl: "http://hulk.snapmediatoghater.site:8080/live/575059928719/702216411125/402064.ts"
+  },
+  {
+    title: "Sport 2",
+    subtitle: "ספורט 2",
+    image: "https://raw.githubusercontent.com/Mumchei/Imagesport/5731cfcb0c8e501c84eb8067a8afc616e3e3d7e0/sport2.png",
+    videoUrl: "http://hulk.snapmediatoghater.site:8080/live/575059928719/702216411125/402066.ts"
+  },
+  {
+    title: "Sport 3",
+    subtitle: "ספורט 3",
+    image: "https://raw.githubusercontent.com/Mumchei/Imagesport/5731cfcb0c8e501c84eb8067a8afc616e3e3d7e0/sport3.png",
+    videoUrl: "http://hulk.snapmediatoghater.site:8080/live/575059928719/702216411125/402068.ts"
+  },
+  {
+    title: "Sport 4",
+    subtitle: "ספורט 4",
+    image: "https://raw.githubusercontent.com/Mumchei/Imagesport/5731cfcb0c8e501c84eb8067a8afc616e3e3d7e0/sport4.png",
+    videoUrl: "http://hulk.snapmediatoghater.site:8080/live/575059928719/702216411125/402070.ts"
+  },
+  {
+    title: "Sport 5 4K",
+    subtitle: "ספורט 5 4K",
+    image: "https://raw.githubusercontent.com/Mumchei/Imagesport/5731cfcb0c8e501c84eb8067a8afc616e3e3d7e0/sport5%204k.png",
+    videoUrl: "http://hulk.snapmediatoghater.site:8080/live/575059928719/702216411125/402072.ts"
+  },
+  {
+    title: "Sport 5 4K IL",
+    subtitle: "ספורט 5 4K ישראל",
+    image: "https://raw.githubusercontent.com/Mumchei/Imagesport/5731cfcb0c8e501c84eb8067a8afc616e3e3d7e0/sport5.png",
+    videoUrl: "http://hulk.snapmediatoghater.site:8080/live/575059928719/702216411125/402074.ts"
+  },
+  {
+    title: "Sport 5",
+    subtitle: "ספורט 5",
+    image: "https://raw.githubusercontent.com/Mumchei/Imagesport/5731cfcb0c8e501c84eb8067a8afc616e3e3d7e0/sport5.png",
+    videoUrl: "http://hulk.snapmediatoghater.site:8080/live/575059928719/702216411125/402075.ts"
+  },
+  {
+    title: "Sport 5 LIVE 4K",
+    subtitle: "ספורט 5 לייב 4K",
+    image: "https://raw.githubusercontent.com/Mumchei/Imagesport/5731cfcb0c8e501c84eb8067a8afc616e3e3d7e0/sport5.png",
+    videoUrl: "http://hulk.snapmediatoghater.site:8080/live/575059928719/702216411125/402076.ts"
+  },
+  {
+    title: "Sport 5 Stars",
+    subtitle: "ספורט 5 סטארס",
+    image: "https://raw.githubusercontent.com/Mumchei/Imagesport/5731cfcb0c8e501c84eb8067a8afc616e3e3d7e0/sport5stars.png",
+    videoUrl: "http://hulk.snapmediatoghater.site:8080/live/575059928719/702216411125/402082.ts"
+  },
+  {
+    title: "ONE",
+    subtitle: "וואן",
+    image: "https://raw.githubusercontent.com/Mumchei/Imagesport/5731cfcb0c8e501c84eb8067a8afc616e3e3d7e0/one11.jpeg",
+    videoUrl: "http://hulk.snapmediatoghater.site:8080/live/575059928719/702216411125/402078.ts"
+  },
+  {
+    title: "ONE 2",
+    subtitle: "וואן 2",
+    image: "https://raw.githubusercontent.com/Mumchei/Imagesport/5731cfcb0c8e501c84eb8067a8afc616e3e3d7e0/H69115529_510x288.png",
+    videoUrl: "http://hulk.snapmediatoghater.site:8080/live/575059928719/702216411125/402081.ts"
+  },
+  {
+    title: "Eurosport 1",
+    subtitle: "יורוספורט 1",
+    image: "https://raw.githubusercontent.com/Mumchei/Imagesport/5731cfcb0c8e501c84eb8067a8afc616e3e3d7e0/sporteuro1.png",
+    videoUrl: "http://hulk.snapmediatoghater.site:8080/live/575059928719/702216411125/402083.ts"
+  },
+  {
+    title: "Eurosport 2",
+    subtitle: "יורוספורט 2",
+    image: "https://raw.githubusercontent.com/Mumchei/Imagesport/5731cfcb0c8e501c84eb8067a8afc616e3e3d7e0/sporteuro2.png",
+    videoUrl: "http://hulk.snapmediatoghater.site:8080/live/575059928719/702216411125/402084.ts"
+  },
+  {
+    title: "Radio Sport 5",
+    subtitle: "רדיו ספורט 5",
+    image: "https://raw.githubusercontent.com/Mumchei/Imagesport/5731cfcb0c8e501c84eb8067a8afc616e3e3d7e0/radio5.jpeg",
+    videoUrl: "http://hulk.snapmediatoghater.site:8080/live/575059928719/702216411125/336375.ts"
+  },
+  {
+    title: "Kan 11",
+    subtitle: "כאן 11",
+    image: "https://raw.githubusercontent.com/Mumchei/Imagesport/5731cfcb0c8e501c84eb8067a8afc616e3e3d7e0/kan11.png",
+    videoUrl: "https://cdnapisec.kaltura.com/p/2717431/sp/2717431/playManifest/entryId/1_syhxntss/deliveryProfileId/672/protocol/https/format/applehttp/a.m3u8"
+  }
+];
+
+    const mainVideo = document.getElementById('mainVideo');
+    const channelList = document.getElementById('channelList');
+    const searchBar = document.getElementById('searchBar');
+    const infoImage = document.getElementById('infoImage');
+    const infoTitle = document.getElementById('infoTitle');
+    const infoSubtitle = document.getElementById('infoSubtitle');
+
+    function updateVideoInfo(channel) {
+      infoImage.src = channel.image;
+      infoImage.alt = channel.title;
+      infoTitle.textContent = channel.title;
+      infoSubtitle.textContent = channel.subtitle;
+    }
+
+    // פונקציה המחליפה את נגן הווידאו לפי סוג הזרם:
+    function loadStream(url) {
+      // אם הקישור מסתיים ב-.ts, נשתמש במנגן mpegts.js
+      if(url.trim().toLowerCase().endsWith('.ts')) {
+        if(window.mpegtsPlayerInstance) {
+          window.mpegtsPlayerInstance.destroy();
+        }
+        window.mpegtsPlayerInstance = mpegts.createPlayer({
+          type: 'mpegts',
+          url: url,
+          isLive: true,
+        });
+        window.mpegtsPlayerInstance.attachMediaElement(mainVideo);
+        window.mpegtsPlayerInstance.load();
+        mainVideo.play();
+      } else if (Hls.isSupported()) {
+        if(window.hlsInstance) { window.hlsInstance.destroy(); }
+        window.hlsInstance = new Hls();
+        window.hlsInstance.loadSource(url);
+        window.hlsInstance.attachMedia(mainVideo);
+        mainVideo.play();
+      } else if (mainVideo.canPlayType('application/vnd.apple.mpegurl')) {
+        mainVideo.src = url;
+        mainVideo.play();
+      } else {
+        console.error("הדפדפן אינו תומך בניגון מקור זה.");
+      }
+    }
+
+    // בעת טעינה ראשונית, מוצגת תמונת הלוגו placeholder והווידאו מוסתר.
+    // לא מתבצעת בחירה אוטומטית של ערוץ כדי לשמור על המצב "לא נבחר ערוץ"
+
+    function createChannelItem(channel) {
+      const item = document.createElement('div');
+      item.className = 'list-item';
+      item.innerHTML = `
+        <img src="${channel.image}" alt="${channel.title}">
+        <div class="item-details">
+          <h3>${channel.title}</h3>
+          <p>${channel.subtitle}</p>
+        </div>
+      `;
+      item.addEventListener('click', () => {
+        loadStream(channel.videoUrl);
+        updateVideoInfo(channel);
+        // בעת בחירת ערוץ, מציגים את הווידאו (ומסתירים את ה-placeholder)
+        mainVideo.style.display = 'block';
+        document.getElementById('videoPlaceholder').style.display = 'none';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+      return item;
+    }
+
+    function renderChannels(filterText = "") {
+      channelList.innerHTML = "";
+      const filtered = channels.filter(channel => {
+        const term = filterText.toLowerCase();
+        return channel.title.toLowerCase().includes(term) || channel.subtitle.toLowerCase().includes(term);
+      });
+      if(filtered.length === 0){
+        channelList.innerHTML = '<div class="no-results">לא נמצאו תוצאות</div>';
+      } else {
+        filtered.forEach(channel => {
+          const channelItem = createChannelItem(channel);
+          channelList.appendChild(channelItem);
+        });
+      }
+    }
+
+    searchBar.addEventListener('input', () => {
+      renderChannels(searchBar.value);
+    });
+
+    renderChannels();
+  </script>
+</body>
+</html>
